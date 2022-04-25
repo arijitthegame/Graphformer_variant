@@ -1,2 +1,1 @@
-# Graphformer_variant
-Variants of graphformer to node classification
+Goal is to modify graphformer https://github.com/microsoft/Graphormer to node classification. We would also use our versions of fast attention as well as adapt graphformer to handle graphs with node and edge feature vectors.
