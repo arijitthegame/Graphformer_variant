@@ -1,5 +1,6 @@
 # pylint: skip-file
 #This is the code as in the official Graphformer repo: https://github.com/microsoft/Graphormer
+#Note that input shape is a bit non-standard.
 #TODO: ADD IN MY OWN MULTIHEAD ATTENTION CODE
 
 import math
@@ -77,9 +78,9 @@ class MultiheadAttention(nn.Module):
     def forward(
         self,
         query,
-        key: Optional[Tensor],
-        value: Optional[Tensor],
-        attn_bias: Optional[Tensor],
+        key=None,
+        value=None,
+        attn_bias=None,
         key_padding_mask: Optional[Tensor] = None,
         need_weights: bool = True,
         attn_mask: Optional[Tensor] = None,
@@ -166,6 +167,8 @@ class MultiheadAttention(nn.Module):
         if key_padding_mask is not None:
             # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            print(attn_weights.shape)
+            print(key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool)[0][:10])
             attn_weights = attn_weights.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
                 float("-inf"),
@@ -175,9 +178,8 @@ class MultiheadAttention(nn.Module):
         if before_softmax:
             return attn_weights, v
 
-        attn_weights_float = utils.softmax(
-            attn_weights, dim=-1, onnx_trace=self.onnx_trace
-        )
+        attn_weights_float = nn.functional.softmax(
+            attn_weights, dim=-1)
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
