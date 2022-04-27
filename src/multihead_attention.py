@@ -1,7 +1,7 @@
 # pylint: skip-file
-#This is the code as in the official Graphformer repo: https://github.com/microsoft/Graphormer
-#Note that input shape is a bit non-standard.
-#TODO: ADD IN MY OWN MULTIHEAD ATTENTION CODE
+# This is the code as in the official Graphformer repo: https://github.com/microsoft/Graphormer
+# Note that input shape is a bit non-standard.
+# TODO: ADD IN MY OWN MULTIHEAD ATTENTION CODE
 
 import math
 from typing import Optional, Tuple
@@ -42,12 +42,13 @@ class MultiheadAttention(nn.Module):
         assert (
             self.head_dim * num_heads == self.embed_dim
         ), "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         assert self.self_attention, "Only support self attention"
 
         assert not self.self_attention or self.qkv_same_dim, (
-            "Self-attention requires query, key and " "value to be of the same size"
+            "Self-attention requires query, key and "
+            "value to be of the same size"
         )
 
         self.k_proj = nn.Linear(self.kdim, embed_dim, bias=bias)
@@ -57,7 +58,6 @@ class MultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.reset_parameters()
-
 
     def reset_parameters(self):
         if self.qkv_same_dim:
@@ -109,7 +109,9 @@ class MultiheadAttention(nn.Module):
 
         tgt_len, bsz, embed_dim = query.size()
         src_len = tgt_len
-        assert embed_dim == self.embed_dim, f"query dim {embed_dim} != {self.embed_dim}"
+        assert (
+            embed_dim == self.embed_dim
+        ), f"query dim {embed_dim} != {self.embed_dim}"
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
         if key is not None:
             src_len, key_bsz, _ = key.size()
@@ -153,12 +155,20 @@ class MultiheadAttention(nn.Module):
             assert key_padding_mask.size(0) == bsz
             assert key_padding_mask.size(1) == src_len
         attn_weights = torch.bmm(q, k.transpose(1, 2))
-        attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
+        attn_weights = self.apply_sparse_mask(
+            attn_weights, tgt_len, src_len, bsz
+        )
 
-        assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
+        assert list(attn_weights.size()) == [
+            bsz * self.num_heads,
+            tgt_len,
+            src_len,
+        ]
 
         if attn_bias is not None:
-            attn_weights += attn_bias.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights += attn_bias.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
 
         if attn_mask is not None:
             attn_mask = attn_mask.unsqueeze(0)
@@ -166,26 +176,37 @@ class MultiheadAttention(nn.Module):
 
         if key_padding_mask is not None:
             # don't attend to padding symbols
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             print(attn_weights.shape)
-            print(key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool)[0][:10])
+            print(
+                key_padding_mask.unsqueeze(1)
+                .unsqueeze(2)
+                .to(torch.bool)[0][:10]
+            )
             attn_weights = attn_weights.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
                 float("-inf"),
             )
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
 
         if before_softmax:
             return attn_weights, v
 
-        attn_weights_float = nn.functional.softmax(
-            attn_weights, dim=-1)
+        attn_weights_float = nn.functional.softmax(attn_weights, dim=-1)
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
         attn = torch.bmm(attn_probs, v)
-        assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
+        assert list(attn.size()) == [
+            bsz * self.num_heads,
+            tgt_len,
+            self.head_dim,
+        ]
 
         attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn = self.out_proj(attn)
@@ -201,7 +222,9 @@ class MultiheadAttention(nn.Module):
 
         return attn, attn_weights
 
-    def apply_sparse_mask(self, attn_weights, tgt_len: int, src_len: int, bsz: int):
+    def apply_sparse_mask(
+        self, attn_weights, tgt_len: int, src_len: int, bsz: int
+    ):
         return attn_weights
 
     def upgrade_state_dict_named(self, state_dict, name):
@@ -213,19 +236,27 @@ class MultiheadAttention(nn.Module):
                 # in_proj_weight used to be q + k + v with same dimensions
                 dim = int(state_dict[k].shape[0] / 3)
                 items_to_add[prefix + "q_proj.weight"] = state_dict[k][:dim]
-                items_to_add[prefix + "k_proj.weight"] = state_dict[k][dim : 2 * dim]
-                items_to_add[prefix + "v_proj.weight"] = state_dict[k][2 * dim :]
+                items_to_add[prefix + "k_proj.weight"] = state_dict[k][
+                    dim : 2 * dim
+                ]
+                items_to_add[prefix + "v_proj.weight"] = state_dict[k][
+                    2 * dim :
+                ]
 
                 keys_to_remove.append(k)
 
                 k_bias = prefix + "in_proj_bias"
                 if k_bias in state_dict.keys():
                     dim = int(state_dict[k].shape[0] / 3)
-                    items_to_add[prefix + "q_proj.bias"] = state_dict[k_bias][:dim]
+                    items_to_add[prefix + "q_proj.bias"] = state_dict[k_bias][
+                        :dim
+                    ]
                     items_to_add[prefix + "k_proj.bias"] = state_dict[k_bias][
                         dim : 2 * dim
                     ]
-                    items_to_add[prefix + "v_proj.bias"] = state_dict[k_bias][2 * dim :]
+                    items_to_add[prefix + "v_proj.bias"] = state_dict[k_bias][
+                        2 * dim :
+                    ]
 
                     keys_to_remove.append(prefix + "in_proj_bias")
 

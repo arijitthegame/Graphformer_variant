@@ -1,16 +1,17 @@
 # pretty much verbatim graphformer code. Will add in the changes to reflect our downstream cases
 
 
-
 from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
 
 
-from graphformer_layer import ( GraphNodeFeature, GraphAttnBias
-                                GraphormerGraphEncoderLayer
-                              )
+from graphformer_layer import (
+    GraphNodeFeature,
+    GraphAttnBias,
+    GraphormerGraphEncoderLayer,
+)
 
 from multihead_attention import MultiheadAttention
 
@@ -64,14 +65,13 @@ class GraphormerGraphEncoder(nn.Module):
         embed_scale: float = None,
         freeze_embeddings: bool = False,
         n_trans_layers_to_freeze: int = 0,
-        graph_type : str = 'undirected'
+        graph_type: str = "undirected",
     ) -> None:
 
         super().__init__()
         self.dropout_module = nn.Dropout(dropout)
         self.embedding_dim = embedding_dim
         self.apply_graphormer_init = apply_graphormer_init
-
 
         self.graph_node_feature = GraphNodeFeature(
             num_heads=num_attention_heads,
@@ -84,7 +84,7 @@ class GraphormerGraphEncoder(nn.Module):
 
         self.graph_attn_bias = GraphAttnBias(
             num_heads=num_attention_heads,
-          #  num_atoms=num_atoms, removing since never used
+            #  num_atoms=num_atoms, removing since never used
             num_edges=num_edges,
             num_spatial=num_spatial,
             num_edge_dis=num_edge_dis,
@@ -95,7 +95,6 @@ class GraphormerGraphEncoder(nn.Module):
         )
 
         self.embed_scale = embed_scale
-
 
         if encoder_normalize_before:
             self.emb_layer_norm = nn.LayerNorm(self.embedding_dim)
@@ -115,7 +114,7 @@ class GraphormerGraphEncoder(nn.Module):
                     dropout=self.dropout,
                     attention_dropout=attention_dropout,
                     activation_dropout=activation_dropout,
-                    activation_fn=activation_fn
+                    activation_fn=activation_fn,
                 )
                 for _ in range(num_encoder_layers)
             ]
@@ -131,7 +130,9 @@ class GraphormerGraphEncoder(nn.Module):
                     p.requires_grad = False
 
         if freeze_embeddings:
-            raise NotImplementedError("Freezing embeddings is not implemented yet.")
+            raise NotImplementedError(
+                "Freezing embeddings is not implemented yet."
+            )
 
         for layer in range(n_trans_layers_to_freeze):
             freeze_module_params(self.layers[layer])
@@ -183,8 +184,8 @@ class GraphormerGraphEncoder(nn.Module):
             x = self.graph_node_feature(batched_data)
 
         if perturb is not None:
-            #ic(torch.mean(torch.abs(x[:, 1, :])))
-            #ic(torch.mean(torch.abs(perturb)))
+            # ic(torch.mean(torch.abs(x[:, 1, :])))
+            # ic(torch.mean(torch.abs(perturb)))
             x[:, 1:, :] += perturb
 
         # x: B x T x C
@@ -219,9 +220,9 @@ class GraphormerGraphEncoder(nn.Module):
                 inner_states.append(x)
 
         graph_rep = x[0, :, :]
-        node_reps = x[1:, :, ]
+        node_reps = [1:, : ]
 
         if last_state_only:
             inner_states = [x]
 
-         return inner_states, graph_rep, node_reps
+        return inner_states, graph_rep, node_reps

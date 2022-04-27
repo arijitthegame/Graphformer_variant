@@ -1,5 +1,6 @@
 import torch
-import torch.nn.functional as F 
+import torch.nn.functional as F
+
 
 def get_activation_fn(activation: str) -> Callable:
     """Returns the activation function corresponding to `activation`"""
@@ -8,7 +9,7 @@ def get_activation_fn(activation: str) -> Callable:
 
     elif activation == "gelu":
         return torch.nn.GELU
-      
+
     elif activation == "tanh":
         return torch.tanh
     elif activation == "linear":
@@ -16,4 +17,6 @@ def get_activation_fn(activation: str) -> Callable:
     elif activation == "swish":
         return torch.nn.SiLU
     else:
-        raise RuntimeError("--activation-fn {} not supported".format(activation))
+        raise RuntimeError(
+            "--activation-fn {} not supported".format(activation)
+        )

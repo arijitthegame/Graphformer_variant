@@ -1,4 +1,4 @@
-#Adding in the layers and modifying them to take in node features. This module is meant to work for node classification and is meant to work for 1 graph.
+# Adding in the layers and modifying them to take in node features. This module is meant to work for node classification and is meant to work for 1 graph.
 
 import math
 from typing import Callable, Optional
@@ -24,34 +24,35 @@ class GraphNodeFeature(nn.Module):
     """
 
     def __init__(
-        self, 
-          num_heads, 
-          feat_dim, 
-          num_in_degree, 
-          hidden_dim, 
-          n_layers, 
-          graph_type='undirected', 
-          num_out_degree=None,
+        self,
+        num_heads,
+        feat_dim,
+        num_in_degree,
+        hidden_dim,
+        n_layers,
+        graph_type="undirected",
+        num_out_degree=None,
     ):
         super(GraphNodeFeature, self).__init__()
         self.num_heads = num_heads
         self.feat_dim = feat_dim
-        self.num_atoms = self.feat_dim[0] 
+        self.num_atoms = self.feat_dim[0]
         self.hidden_dim = hidden_dim
         self.num_in_degree = num_in_degree
         self.graph_type = graph_type
         self.num_out_degree = num_out_degree
-              
 
         # 1 for graph token
-      #  self.atom_encoder = nn.Embedding(self.num_atoms + 1, self.hidden_dim, padding_idx=0)
+        #  self.atom_encoder = nn.Embedding(self.num_atoms + 1, self.hidden_dim, padding_idx=0)
         self.node_encoder = nn.Linear(self.feat_dim, self.hidden_dim)
-        self.in_degree_encoder = nn.Embedding(self.num_in_degree, self.hidden_dim, padding_idx=0)
-        if self.graph_type == 'directed':
-          assert self.num_out_degree is not None
-          self.out_degree_encoder = nn.Embedding(
-            self.num_out_degree, self.hidden_dim, padding_idx=0
+        self.in_degree_encoder = nn.Embedding(
+            self.num_in_degree, self.hidden_dim, padding_idx=0
         )
+        if self.graph_type == "directed":
+            assert self.num_out_degree is not None
+            self.out_degree_encoder = nn.Embedding(
+                self.num_out_degree, self.hidden_dim, padding_idx=0
+            )
 
         self.graph_token = nn.Embedding(1, hidden_dim)
 
@@ -63,26 +64,36 @@ class GraphNodeFeature(nn.Module):
             batched_data["in_degree"],
             batched_data["out_degree"],
         )
-        n_graph, n_node = x.size()[:2] #expects x to be 3 dim [T,B,n_node, node_feat]
-        assert(x.dim()==4)
+        n_graph, n_node = x.size()[
+            :2
+        ]  # expects x to be 3 dim [T,B,n_node, node_feat]
+        assert x.dim() == 4
 
         # node feauture + graph token
-        node_feature = self.node_encoder(x).sum(dim=-2) +  # [n_graph, n_node, n_hidden]
+        node_feature = self.node_encoder(x).sum(
+            dim=-2
+        )  # [n_graph, n_node, n_hidden]
 
-        node_feature = (
-            node_feature
-            + self.in_degree_encoder(in_degree)
-            + self.out_degree_encoder(out_degree)
+        if self.graph_type == "directed":
+            node_feature = (
+                node_feature
+                + self.in_degree_encoder(in_degree)
+                + self.out_degree_encoder(out_degree)
+            )
+        else:
+            node_feature = node_feature + self.in_degree_encoder(in_degree)
+
+        graph_token_feature = self.graph_token.weight.unsqueeze(0).repeat(
+            n_graph, 1, 1
         )
 
-        graph_token_feature = self.graph_token.weight.unsqueeze(0).repeat(n_graph, 1, 1)
-
-        graph_node_feature = torch.cat([graph_token_feature, node_feature], dim=1) #[CLS] token for a graph
+        graph_node_feature = torch.cat(
+            [graph_token_feature, node_feature], dim=1
+        )  # [CLS] token for a graph
 
         return graph_node_feature
-    
-    
-    
+
+
 class GraphAttnBias(nn.Module):
     """
     Compute attention bias for each head.
@@ -91,7 +102,7 @@ class GraphAttnBias(nn.Module):
     def __init__(
         self,
         num_heads,
-       # num_atoms, removing since never used in the code
+        # num_atoms, removing since never used in the code
         num_edges,
         num_spatial,
         num_edge_dis,
@@ -104,14 +115,18 @@ class GraphAttnBias(nn.Module):
         self.num_heads = num_heads
         self.multi_hop_max_dist = multi_hop_max_dist
 
-       # do we have edge features?
-        self.edge_encoder = nn.Embedding(num_edges + 1, num_heads, padding_idx=0)
+        # do we have edge features?
+        self.edge_encoder = nn.Embedding(
+            num_edges + 1, num_heads, padding_idx=0
+        )
         self.edge_type = edge_type
         if self.edge_type == "multi_hop":
             self.edge_dis_encoder = nn.Embedding(
                 num_edge_dis * num_heads * num_heads, 1
             )
-        self.spatial_pos_encoder = nn.Embedding(num_spatial, num_heads, padding_idx=0)
+        self.spatial_pos_encoder = nn.Embedding(
+            num_spatial, num_heads, padding_idx=0
+        )
 
         self.graph_token_virtual_distance = nn.Embedding(1, num_heads)
 
@@ -130,7 +145,7 @@ class GraphAttnBias(nn.Module):
         )
 
         n_graph, n_node = x.size()[:2]
-        
+
         graph_attn_bias = attn_bias.clone()
         graph_attn_bias = graph_attn_bias.unsqueeze(1).repeat(
             1, self.num_heads, 1, 1
@@ -138,8 +153,12 @@ class GraphAttnBias(nn.Module):
 
         # spatial pos
         # [n_graph, n_node, n_node, n_head] -> [n_graph, n_head, n_node, n_node]
-        spatial_pos_bias = self.spatial_pos_encoder(spatial_pos).permute(0, 3, 1, 2)
-        graph_attn_bias[:, :, 1:, 1:] = graph_attn_bias[:, :, 1:, 1:] + spatial_pos_bias
+        spatial_pos_bias = self.spatial_pos_encoder(spatial_pos).permute(
+            0, 3, 1, 2
+        )
+        graph_attn_bias[:, :, 1:, 1:] = (
+            graph_attn_bias[:, :, 1:, 1:] + spatial_pos_bias
+        )
 
         # reset spatial pos here
         t = self.graph_token_virtual_distance.weight.view(1, self.num_heads, 1)
@@ -151,7 +170,9 @@ class GraphAttnBias(nn.Module):
             spatial_pos_ = spatial_pos.clone()
             spatial_pos_[spatial_pos_ == 0] = 1  # set pad to 1
             # set 1 to 1, x > 1 to x - 1
-            spatial_pos_ = torch.where(spatial_pos_ > 1, spatial_pos_ - 1, spatial_pos_)
+            spatial_pos_ = torch.where(
+                spatial_pos_ > 1, spatial_pos_ - 1, spatial_pos_
+            )
             if self.multi_hop_max_dist > 0:
                 spatial_pos_ = spatial_pos_.clamp(0, self.multi_hop_max_dist)
                 edge_input = edge_input[:, :, :, : self.multi_hop_max_dist, :]
@@ -175,14 +196,16 @@ class GraphAttnBias(nn.Module):
             ).permute(0, 3, 1, 2)
         else:
             # [n_graph, n_node, n_node, n_head] -> [n_graph, n_head, n_node, n_node]
-            edge_input = self.edge_encoder(attn_edge_type).mean(-2).permute(0, 3, 1, 2)
+            edge_input = (
+                self.edge_encoder(attn_edge_type).mean(-2).permute(0, 3, 1, 2)
+            )
 
-        graph_attn_bias[:, :, 1:, 1:] = graph_attn_bias[:, :, 1:, 1:] + edge_input
+        graph_attn_bias[:, :, 1:, 1:] = (
+            graph_attn_bias[:, :, 1:, 1:] + edge_input
+        )
         graph_attn_bias = graph_attn_bias + attn_bias.unsqueeze(1)  # reset
 
         return graph_attn_bias
-    
-
 
 
 class GraphormerGraphEncoderLayer(nn.Module):
@@ -225,18 +248,11 @@ class GraphormerGraphEncoderLayer(nn.Module):
         # layer norm associated with the self attention layer
         self.self_attn_layer_norm = nn.LayerNorm(self.embedding_dim)
 
-        self.fc1 = nn.Linear(
-            self.embedding_dim,
-            ffn_embedding_dim
-        )
-        self.fc2 = nn.Linear(
-            ffn_embedding_dim,
-            self.embedding_dim
-        )
+        self.fc1 = nn.Linear(self.embedding_dim, ffn_embedding_dim)
+        self.fc2 = nn.Linear(ffn_embedding_dim, self.embedding_dim)
 
         # layer norm associated with the position wise feed-forward NN
         self.final_layer_norm = nn.LayerNorm(self.embedding_dim)
-
 
     def build_self_attention(
         self,
