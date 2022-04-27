@@ -91,7 +91,7 @@ class GraphAttnBias(nn.Module):
     def __init__(
         self,
         num_heads,
-        num_atoms,
+       # num_atoms, removing since never used in the code
         num_edges,
         num_spatial,
         num_edge_dis,
