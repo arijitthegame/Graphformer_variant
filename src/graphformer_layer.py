@@ -6,6 +6,8 @@ from typing import Callable, Optional
 import torch
 import torch.nn as nn
 
+import utils
+
 
 def init_params(module, n_layers):
     if isinstance(module, nn.Linear):
@@ -218,34 +220,23 @@ class GraphormerGraphEncoderLayer(nn.Module):
             num_attention_heads,
             dropout=attention_dropout,
             self_attention=True,
-            q_noise=q_noise,
-            qn_block_size=qn_block_size,
         )
 
         # layer norm associated with the self attention layer
-        self.self_attn_layer_norm = LayerNorm(self.embedding_dim, export=export)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embedding_dim)
 
-        self.fc1 = self.build_fc1(
+        self.fc1 = nn.Linear(
             self.embedding_dim,
-            ffn_embedding_dim,
-            q_noise=q_noise,
-            qn_block_size=qn_block_size,
+            ffn_embedding_dim
         )
-        self.fc2 = self.build_fc2(
+        self.fc2 = nn.Linear(
             ffn_embedding_dim,
-            self.embedding_dim,
-            q_noise=q_noise,
-            qn_block_size=qn_block_size,
+            self.embedding_dim
         )
 
         # layer norm associated with the position wise feed-forward NN
-        self.final_layer_norm = LayerNorm(self.embedding_dim, export=export)
+        self.final_layer_norm = nn.LayerNorm(self.embedding_dim)
 
-    def build_fc1(self, input_dim, output_dim, q_noise, qn_block_size):
-        return quant_noise(nn.Linear(input_dim, output_dim), q_noise, qn_block_size)
-
-    def build_fc2(self, input_dim, output_dim, q_noise, qn_block_size):
-        return quant_noise(nn.Linear(input_dim, output_dim), q_noise, qn_block_size)
 
     def build_self_attention(
         self,
@@ -253,16 +244,12 @@ class GraphormerGraphEncoderLayer(nn.Module):
         num_attention_heads,
         dropout,
         self_attention,
-        q_noise,
-        qn_block_size,
     ):
         return MultiheadAttention(
             embed_dim,
             num_attention_heads,
             dropout=dropout,
             self_attention=True,
-            q_noise=q_noise,
-            qn_block_size=qn_block_size,
         )
 
     def forward(
