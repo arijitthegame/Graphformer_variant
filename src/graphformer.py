@@ -1,12 +1,6 @@
 # pretty much verbatim graphformer code. Will add in the changes to reflect our downstream cases
 
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
 
-# Copyright (c) Facebook, Inc. and its affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
 
 from typing import Optional, Tuple
 
@@ -17,6 +11,8 @@ import torch.nn as nn
 from graphformer_layer import ( GraphNodeFeature, GraphAttnBias
                                 GraphormerGraphEncoderLayer
                               )
+
+from multihead_attention import MultiheadAttention
 
 
 def init_graphormer_params(module):
@@ -46,7 +42,7 @@ def init_graphormer_params(module):
 class GraphormerGraphEncoder(nn.Module):
     def __init__(
         self,
-        num_atoms: int,
+        feat_dim: int,
         num_in_degree: int,
         num_out_degree: int,
         num_edges: int,
@@ -61,7 +57,6 @@ class GraphormerGraphEncoder(nn.Module):
         dropout: float = 0.1,
         attention_dropout: float = 0.1,
         activation_dropout: float = 0.1,
-        layerdrop: float = 0.0,
         encoder_normalize_before: bool = False,
         pre_layernorm: bool = False,
         apply_graphormer_init: bool = False,
@@ -69,24 +64,18 @@ class GraphormerGraphEncoder(nn.Module):
         embed_scale: float = None,
         freeze_embeddings: bool = False,
         n_trans_layers_to_freeze: int = 0,
-        export: bool = False,
-        traceable: bool = False,
-        q_noise: float = 0.0,
-        qn_block_size: int = 8,
+        graph_type : str = 'undirected'
     ) -> None:
 
         super().__init__()
-        self.dropout_module = FairseqDropout(
-            dropout, module_name=self.__class__.__name__
-        )
-        self.layerdrop = layerdrop
+        self.dropout_module = nn.Dropout(dropout)
         self.embedding_dim = embedding_dim
         self.apply_graphormer_init = apply_graphormer_init
-        self.traceable = traceable
+
 
         self.graph_node_feature = GraphNodeFeature(
             num_heads=num_attention_heads,
-            num_atoms=num_atoms,
+            feat_dim=feat_dim,
             num_in_degree=num_in_degree,
             num_out_degree=num_out_degree,
             hidden_dim=embedding_dim,
@@ -95,7 +84,7 @@ class GraphormerGraphEncoder(nn.Module):
 
         self.graph_attn_bias = GraphAttnBias(
             num_heads=num_attention_heads,
-            num_atoms=num_atoms,
+          #  num_atoms=num_atoms, removing since never used
             num_edges=num_edges,
             num_spatial=num_spatial,
             num_edge_dis=num_edge_dis,
@@ -107,41 +96,26 @@ class GraphormerGraphEncoder(nn.Module):
 
         self.embed_scale = embed_scale
 
-        if q_noise > 0:
-            self.quant_noise = apply_quant_noise_(
-                nn.Linear(self.embedding_dim, self.embedding_dim, bias=False),
-                q_noise,
-                qn_block_size,
-            )
-        else:
-            self.quant_noise = None
 
         if encoder_normalize_before:
-            self.emb_layer_norm = LayerNorm(self.embedding_dim, export=export)
+            self.emb_layer_norm = nn.LayerNorm(self.embedding_dim)
         else:
             self.emb_layer_norm = None
 
         if pre_layernorm:
-            self.final_layer_norm = LayerNorm(self.embedding_dim, export=export)
+            self.final_layer_norm = nn.LayerNorm(self.embedding_dim)
 
-        if self.layerdrop > 0.0:
-            self.layers = LayerDropModuleList(p=self.layerdrop)
-        else:
-            self.layers = nn.ModuleList([])
+        self.layers = nn.ModuleList([])
         self.layers.extend(
             [
                 self.build_graphormer_graph_encoder_layer(
                     embedding_dim=self.embedding_dim,
                     ffn_embedding_dim=ffn_embedding_dim,
                     num_attention_heads=num_attention_heads,
-                    dropout=self.dropout_module.p,
+                    dropout=self.dropout,
                     attention_dropout=attention_dropout,
                     activation_dropout=activation_dropout,
-                    activation_fn=activation_fn,
-                    export=export,
-                    q_noise=q_noise,
-                    qn_block_size=qn_block_size,
-                    pre_layernorm=pre_layernorm,
+                    activation_fn=activation_fn
                 )
                 for _ in range(num_encoder_layers)
             ]
@@ -171,9 +145,6 @@ class GraphormerGraphEncoder(nn.Module):
         attention_dropout,
         activation_dropout,
         activation_fn,
-        export,
-        q_noise,
-        qn_block_size,
         pre_layernorm,
     ):
         return GraphormerGraphEncoderLayer(
@@ -184,9 +155,6 @@ class GraphormerGraphEncoder(nn.Module):
             attention_dropout=attention_dropout,
             activation_dropout=activation_dropout,
             activation_fn=activation_fn,
-            export=export,
-            q_noise=q_noise,
-            qn_block_size=qn_block_size,
             pre_layernorm=pre_layernorm,
         )
 
@@ -226,9 +194,6 @@ class GraphormerGraphEncoder(nn.Module):
         if self.embed_scale is not None:
             x = x * self.embed_scale
 
-        if self.quant_noise is not None:
-            x = self.quant_noise(x)
-
         if self.emb_layer_norm is not None:
             x = self.emb_layer_norm(x)
 
@@ -254,11 +219,9 @@ class GraphormerGraphEncoder(nn.Module):
                 inner_states.append(x)
 
         graph_rep = x[0, :, :]
+        node_reps = x[1:, :, ]
 
         if last_state_only:
             inner_states = [x]
 
-        if self.traceable:
-            return torch.stack(inner_states), graph_rep
-        else:
-            return inner_states, graph_rep
+         return inner_states, graph_rep, node_reps
