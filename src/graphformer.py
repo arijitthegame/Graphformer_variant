@@ -220,7 +220,7 @@ class GraphormerGraphEncoder(nn.Module):
                 inner_states.append(x)
 
         graph_rep = x[0, :, :]
-        node_reps = [1:, : ]
+        node_reps = x[1:, : ]
 
         if last_state_only:
             inner_states = [x]
